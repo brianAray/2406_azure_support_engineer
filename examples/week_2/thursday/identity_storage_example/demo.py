@@ -36,7 +36,22 @@ def connect_using_sas_token():
     except Exception as e:
         print(f"Error connecting: {e}")
 
+# Method 3: Authenticating via Managed Identity (Secretless, Dynamic)
+def connect_using_managed_identity():
+    print("--- COnnecting using Managed Identity ---")
+    account_url = f"https://{account_name}.blob.core.windows.net"
+
+    try:
+        # DefaultAzureCredential automatically pulls VM System-Assigned Managed Identity Token when run in Azure
+        token_credential = DefaultAzureCredential()
+        blob_service_client = BlobServiceClient(account_url, credential=token_credential)
+        print("Success: Initialized BlobServiceClient using secretless DefaultAzureCredential (Managed Identity).")
+    except Exception as e:
+        print(f"Error connecting: {e}")
+    print()
+
 if __name__ == "__main__":
     print("=== Azure Blob Authentication Configuration Demo ===")
     # connect_using_access_key()
-    connect_using_sas_token()
+    # connect_using_sas_token()
+    connect_using_managed_identity()
