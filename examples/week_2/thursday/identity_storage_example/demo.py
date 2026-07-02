@@ -46,6 +46,8 @@ def connect_using_managed_identity():
         token_credential = DefaultAzureCredential()
         blob_service_client = BlobServiceClient(account_url, credential=token_credential)
         print("Success: Initialized BlobServiceClient using secretless DefaultAzureCredential (Managed Identity).")
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        blob_client.upload_blob("Hello there", overwrite=True)
     except Exception as e:
         print(f"Error connecting: {e}")
     print()
