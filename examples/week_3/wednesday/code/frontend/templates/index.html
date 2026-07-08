@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure User-Defined Routing (UDR) Diagnostics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-error: #ef4444;
+            --color-info: #06b6d4;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+
+        header {
+            max-width: 1200px;
+            margin: 0 auto 3rem auto;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
+
+        .actions-bar {
+            max-width: 1200px;
+            margin: 0 auto 2rem auto;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
+            filter: brightness(1.1);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .grid-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: 'Fira Code', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .card-body {
+            margin-bottom: 1.5rem;
+        }
+
+        .info-item {
+            margin-bottom: 0.75rem;
+        }
+
+        .info-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .info-value {
+            font-size: 0.95rem;
+            font-weight: 400;
+        }
+
+        .udr-badge {
+            background: rgba(99, 102, 241, 0.1);
+            color: #a5b4fc;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            border: 1px dashed rgba(99, 102, 241, 0.3);
+            margin-top: 0.25rem;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .status-badge {
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+        }
+
+        .status-badge.pending {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-badge.success {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--color-success);
+        }
+
+        .status-badge.timeout {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-error);
+        }
+
+        .status-badge.connection-refused {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--color-warning);
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-error);
+        }
+
+        .duration-lbl {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .card-footer {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .card-footer button {
+            flex: 1;
+        }
+
+        .console-container {
+            max-width: 1200px;
+            margin: 3rem auto 0 auto;
+        }
+
+        .console-header {
+            background: #1e293b;
+            padding: 0.75rem 1rem;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            border: 1px solid var(--card-border);
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .console-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .console-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #10b981; }
+
+        .console-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: 'Fira Code', monospace;
+        }
+
+        .console-body {
+            background: #090d16;
+            border: 1px solid var(--card-border);
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #38bdf8;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Azure User-Defined Routing Diagnostics</h1>
+        <p>Demonstrating how Route Tables, Subnet associations, and NSGs affect packet routing paths.</p>
+    </header>
+
+    <div class="actions-bar">
+        <button class="btn" id="run-all">Run All Diagnostics</button>
+    </div>
+
+    <div class="grid-container">
+        {% for key, target in targets.items() %}
+        <div class="card" id="card-{{ key }}">
+            <div class="card-header">
+                <h3 class="card-title">{{ target.name }}</h3>
+                <span class="card-subtitle">{{ target.ip }}:{{ target.port }}</span>
+            </div>
+            
+            <div class="card-body">
+                <div class="info-item">
+                    <div class="info-label">Expected Result</div>
+                    <div class="info-value" style="color: var(--text-primary);">{{ target.expected }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Target Route Pathway</div>
+                    <div class="udr-badge">{{ target.udr_info }}</div>
+                </div>
+                <div class="info-item" style="margin-top: 1rem; display: none;" id="result-info-{{ key }}">
+                    <div class="info-label">Response Detail</div>
+                    <div class="info-value" id="detail-{{ key }}" style="color: #a7f3d0; font-size: 0.9rem;"></div>
+                </div>
+            </div>
+
+            <div class="status-container">
+                <div>
+                    <span class="status-badge" id="badge-{{ key }}">Idle</span>
+                </div>
+                <div class="duration-lbl" id="time-{{ key }}">-- ms</div>
+            </div>
+
+            <div class="card-footer">
+                <button class="btn btn-test" data-target="{{ key }}">Test Link</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="console-container">
+        <div class="console-header">
+            <div class="console-dots">
+                <div class="console-dot dot-red"></div>
+                <div class="console-dot dot-yellow"></div>
+                <div class="console-dot dot-green"></div>
+            </div>
+            <div class="console-title">udr_diagnostics_log.sh</div>
+            <div></div>
+        </div>
+        <div class="console-body" id="console">--- Web App diagnostics logger initialized. Click "Test Link" to capture socket trace logs ---</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const consoleEl = document.getElementById('console');
+            
+            function logToConsole(text, type='info') {
+                const timestamp = new Date().toLocaleTimeString();
+                let color = '#38bdf8'; // info
+                if (type === 'success') color = '#10b981';
+                if (type === 'error') color = '#f87171';
+                if (type === 'warn') color = '#fbbf24';
+
+                consoleEl.innerHTML += `\n[${timestamp}] <span style="color: ${color}">${text}</span>`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+
+            async function runTest(targetKey) {
+                const card = document.getElementById(`card-${targetKey}`);
+                const badge = document.getElementById(`badge-${targetKey}`);
+                const timeEl = document.getElementById(`time-${targetKey}`);
+                const detailEl = document.getElementById(`detail-${targetKey}`);
+                const resultInfo = document.getElementById(`result-info-${targetKey}`);
+
+                badge.className = 'status-badge pending';
+                badge.innerText = 'Testing...';
+                timeEl.innerText = '-- ms';
+                resultInfo.style.display = 'none';
+
+                logToConsole(`[INIT] Connection test to '${targetKey}' initiated...`);
+
+                try {
+                    const response = await fetch('/test-route', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target: targetKey })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    timeEl.innerText = `${data.duration} ms`;
+                    detailEl.innerText = data.detail;
+                    resultInfo.style.display = 'block';
+
+                    if (data.status === 'Success') {
+                        badge.className = 'status-badge success';
+                        badge.innerText = 'Success';
+                        logToConsole(`[SUCCESS] Resolved target '${targetKey}' in ${data.duration}ms. Path: ${data.udr_info}. Response: ${data.detail}`, 'success');
+                    } else if (data.status === 'Timeout') {
+                        badge.className = 'status-badge timeout';
+                        badge.innerText = 'Timeout';
+                        logToConsole(`[TIMEOUT] Target '${targetKey}' connection timed out! Packet dropped. Path: ${data.udr_info}`, 'error');
+                    } else if (data.status === 'Connection Refused') {
+                        badge.className = 'status-badge connection-refused';
+                        badge.innerText = 'Refused';
+                        logToConsole(`[REFUSED] Target '${targetKey}' rejected connection. Path: ${data.udr_info}. Reason: ${data.detail}`, 'warn');
+                    } else {
+                        badge.className = 'status-badge error';
+                        badge.innerText = 'Error';
+                        logToConsole(`[ERROR] Target '${targetKey}' test encountered error: ${data.detail}`, 'error');
+                    }
+
+                } catch (err) {
+                    badge.className = 'status-badge error';
+                    badge.innerText = 'Error';
+                    logToConsole(`[ERROR] Ajax request failed: ${err.message}`, 'error');
+                }
+            }
+
+            document.querySelectorAll('.btn-test').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const target = e.target.getAttribute('data-target');
+                    runTest(target);
+                });
+            });
+
+            document.getElementById('run-all').addEventListener('click', async () => {
+                logToConsole('--- Batch Diagnostic Run Initiated ---', 'warn');
+                const targets = ['backend', 'ssh', 'external-api', 'malicious', 'onprem'];
+                for (const t of targets) {
+                    await runTest(t);
+                }
+                logToConsole('--- Batch Diagnostic Run Completed ---', 'warn');
+            });
+        });
+    </script>
+</body>
+</html>
