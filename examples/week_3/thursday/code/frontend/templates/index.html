@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Load Balancer & Health Diagnostics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #090d16 0%, #111827 100%);
+            --card-bg: rgba(31, 41, 55, 0.6);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --accent-primary: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.15);
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-error: #ef4444;
+            --color-info: #06b6d4;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+
+        header {
+            max-width: 1200px;
+            margin: 0 auto 2.5rem auto;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-background-fill-color: transparent;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 900px) {
+            .dashboard-container {
+                grid-template-columns: 350px 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.75rem;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-family: 'Fira Code', monospace;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .info-group {
+            margin-bottom: 1rem;
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+        .badge-error { background: rgba(239, 68, 68, 0.15); color: var(--color-error); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+        .badge-info { background: rgba(6, 182, 212, 0.15); color: var(--color-info); }
+
+        .btn {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 0.65rem 1.25rem;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px var(--accent-glow);
+            text-align: center;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+            filter: brightness(1.15);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            box-shadow: none;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: none;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.8);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+        }
+
+        .btn-danger:hover {
+            background: var(--color-error);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+        }
+
+        .backend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .backend-card {
+            background: rgba(17, 24, 39, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .backend-state-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .backend-state-row:last-of-type {
+            border-bottom: none;
+        }
+
+        .controls-title {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 0.75rem;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .console-container {
+            max-width: 1200px;
+            margin: 2.5rem auto 0 auto;
+        }
+
+        .console-header {
+            background: #1f2937;
+            padding: 0.75rem 1rem;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            border: 1px solid var(--card-border);
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .console-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .console-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #10b981; }
+
+        .console-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: 'Fira Code', monospace;
+        }
+
+        .console-body {
+            background: #030712;
+            border: 1px solid var(--card-border);
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: #60a5fa;
+            min-height: 220px;
+            max-height: 350px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .client-traffic-section {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px dashed rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .pulse-element {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Azure Load Balancer & Health Diagnostics</h1>
+        <p>Demonstrating Layer 4 traffic distribution, health probes, and standard secure-by-default rules.</p>
+    </header>
+
+    <div class="dashboard-container">
+        <!-- Load Balancer configuration card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">lb-app-prod-01</h3>
+                <span class="card-subtitle">Standard SKU Load Balancer</span>
+            </div>
+            
+            <div class="info-group">
+                <div class="info-label">Frontend IP (pip-lb-prod-01)</div>
+                <div class="info-value" style="font-family: 'Fira Code', monospace; color: #60a5fa;">198.51.100.99</div>
+            </div>
+
+            <div class="info-group">
+                <div class="info-label">Health Probe Configurations</div>
+                <div class="info-value" style="font-size: 0.9rem;">
+                    HTTP GET to <code style="font-family: 'Fira Code', monospace; color: #a7f3d0;">/health</code> on Port 80<br>
+                    Interval: 5s | Threshold: 2 failures
+                </div>
+            </div>
+
+            <div class="info-group">
+                <div class="info-label">Load Balancing Rule</div>
+                <div class="info-value" style="font-size: 0.9rem;">
+                    Port 80 (TCP) Frontend &rarr; Port 80 (TCP) Backend
+                </div>
+            </div>
+
+            <div class="info-group">
+                <div class="info-label">Stateful NAT Mapping</div>
+                <div class="info-value" style="font-size: 0.85rem; color: var(--text-secondary); background: rgba(0,0,0,0.15); padding: 0.5rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.03);">
+                    Requires SNAT on exit paths. Inbound probe traffic must flow from service IP <code style="font-family: 'Fira Code', monospace; color: #f59e0b;">168.63.129.16</code>.
+                </div>
+            </div>
+
+            <div class="client-traffic-section">
+                <div class="info-label" style="text-align: center; margin-bottom: 0.5rem;">Simulate Traffic</div>
+                <button class="btn" id="btn-send-traffic" style="width: 100%;">Send Client Requests</button>
+            </div>
+        </div>
+
+        <!-- Backend pool cards container -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="card" style="flex: 1;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                    <h3 class="card-title" style="margin-bottom: 0;">Backend Pool (BackEndPool)</h3>
+                    <span class="badge badge-info" id="lb-healthy-count">0 / 2 Online</span>
+                </div>
+                
+                <div class="backend-grid" id="backend-pool-grid">
+                    <!-- Cards will be dynamically updated by JS -->
+                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary); grid-column: 1/-1;">
+                        Loading backend address pool states...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Console Logging Window -->
+    <div class="console-container">
+        <div class="console-header">
+            <div class="console-dots">
+                <div class="console-dot dot-red"></div>
+                <div class="console-dot dot-yellow"></div>
+                <div class="console-dot dot-green"></div>
+            </div>
+            <div class="console-title">azure_load_balancer_logs.log</div>
+            <div></div>
+        </div>
+        <div class="console-body" id="console-log">--- Azure Load Balancer Simulation Logger Initialized. Monitoring health checks on backend VMs ---</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const consoleEl = document.getElementById('console-log');
+            const gridEl = document.getElementById('backend-pool-grid');
+            const healthyCountEl = document.getElementById('lb-healthy-count');
+            const trafficBtn = document.getElementById('btn-send-traffic');
+
+            let lastProbeStates = {};
+
+            function log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                let color = '#38bdf8'; // info cyan
+                if (type === 'success') color = '#10b981'; // healthy green
+                if (type === 'error') color = '#ef4444'; // failure red
+                if (type === 'warn') color = '#f59e0b'; // warning yellow
+                if (type === 'routing') color = '#c084fc'; // purple routing
+
+                consoleEl.innerHTML += `\n[${timestamp}] <span style="color: ${color}">${message}</span>`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+
+            async function updateStatus() {
+                try {
+                    const response = await fetch('/api/lb-status');
+                    const data = await response.json();
+                    
+                    let healthyCount = 0;
+                    gridEl.innerHTML = '';
+
+                    data.backend_pool.forEach(node => {
+                        if (node.probe_state === 'Healthy') {
+                            healthyCount++;
+                        }
+
+                        // Check if probe status transitioned to alert in logs
+                        const stateKey = node.id;
+                        const prevState = lastProbeStates[stateKey];
+                        if (prevState && prevState !== node.probe_state) {
+                            if (node.probe_state === 'Healthy') {
+                                log(`[HEALTH RECOVERY] Health probe for backend '${node.name}' succeeded. Node returned Healthy (HTTP 200 OK).`, 'success');
+                            } else {
+                                log(`[HEALTH OUTAGE] Health probe for backend '${node.name}' failed! Reason: ${node.probe_message}. Node removed from pool.`, 'error');
+                            }
+                        }
+                        lastProbeStates[stateKey] = node.probe_state;
+
+                        // Build HTML card for backend
+                        const card = document.createElement('div');
+                        card.className = 'card backend-card';
+                        
+                        card.innerHTML = `
+                            <div class="card-header" style="margin-bottom: 0.75rem; padding-bottom: 0.5rem;">
+                                <h4 class="card-title" style="font-size: 1.1rem; display: flex; justify-content: space-between;">
+                                    <span>${node.name}</span>
+                                    <span class="badge ${node.probe_state === 'Healthy' ? 'badge-success' : 'badge-error'}">${node.probe_state}</span>
+                                </h4>
+                                <span class="card-subtitle">${node.ip}:${node.port}</span>
+                            </div>
+                            <div style="margin-bottom: 1rem; flex: 1;">
+                                <div class="backend-state-row">
+                                    <span class="info-label" style="margin: 0;">Flask Process:</span>
+                                    <span class="badge ${node.is_running ? 'badge-success' : 'badge-error'}">${node.is_running ? 'Active' : 'Offline'}</span>
+                                </div>
+                                <div class="backend-state-row">
+                                    <span class="info-label" style="margin: 0;">Firewall (168.63.129.16):</span>
+                                    <span class="badge ${node.firewall_allows_probe_ip ? 'badge-success' : 'badge-error'}">${node.firewall_allows_probe_ip ? 'Allowed' : 'Blocked'}</span>
+                                </div>
+                                <div class="backend-state-row">
+                                    <span class="info-label" style="margin: 0;">Probe Latency:</span>
+                                    <span style="font-family: 'Fira Code', monospace; font-size: 0.85rem;">${node.probe_duration} ms</span>
+                                </div>
+                                <div class="backend-state-row" style="border-bottom: none; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding-top: 0.5rem;">
+                                    <span class="info-label" style="margin: 0;">Probe Message:</span>
+                                    <span style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'Fira Code', monospace;">${node.probe_message}</span>
+                                </div>
+                            </div>
+                            <div class="controls-title">Simulate Host Triggers</div>
+                            <div class="controls-grid">
+                                <button class="btn btn-secondary btn-toggle" data-id="${node.id}" data-type="process">
+                                    ${node.is_running ? 'Kill App' : 'Start App'}
+                                </button>
+                                <button class="btn btn-secondary btn-toggle" data-id="${node.id}" data-type="firewall">
+                                    ${node.firewall_allows_probe_ip ? 'Block Probe' : 'Allow Probe'}
+                                </button>
+                            </div>
+                        `;
+                        gridEl.appendChild(card);
+                    });
+
+                    healthyCountEl.className = healthyCount > 0 ? 'badge badge-success' : 'badge badge-error';
+                    healthyCountEl.innerText = `${healthyCount} / 2 Online`;
+
+                    // Re-bind click event triggers
+                    document.querySelectorAll('.btn-toggle').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const nodeId = e.target.getAttribute('data-id');
+                            const toggleType = e.target.getAttribute('data-type');
+                            
+                            e.target.disabled = true;
+                            e.target.innerText = 'Applying...';
+                            
+                            log(`[TRIGGER] Admin request to toggle ${toggleType} on node '${nodeId}'...`);
+                            
+                            try {
+                                await fetch('/api/toggle-backend', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ target: nodeId, type: toggleType })
+                                });
+                                await updateStatus();
+                            } catch (err) {
+                                log(`[ERROR] Failed to toggle node state: ${err.message}`, 'error');
+                            }
+                        });
+                    });
+
+                } catch (err) {
+                    console.error("Failed to query LB status", err);
+                }
+            }
+
+            // Perform health auditing loop logs simulating Azure background checks
+            setInterval(async () => {
+                await updateStatus();
+            }, 5000);
+
+            // Initial load
+            updateStatus();
+
+            // Client traffic generator button
+            trafficBtn.addEventListener('click', async () => {
+                trafficBtn.disabled = true;
+                trafficBtn.innerText = 'Sending traffic...';
+                
+                log(`[TRAFFIC] Starting client request simulation sequence (6 requests)...`, 'routing');
+                
+                for (let i = 0; i < 6; i++) {
+                    const clientIp = `203.0.113.${10 + i}`;
+                    try {
+                        const response = await fetch('/api/route-request', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ client_ip: clientIp })
+                        });
+                        const data = await response.json();
+                        
+                        if (data.status === 'Success') {
+                            log(`[ROUTE SUCCESS] Request from ${clientIp} to frontend IP balanced & routed &rarr; ${data.node} (${data.ip}). Response: "${data.detail}" (${data.duration}ms)`, 'routing');
+                        } else if (data.status === 'Timeout') {
+                            log(`[ROUTE TIMEOUT] Request from ${clientIp} routed &rarr; ${data.node} (${data.ip}) but backend connection timed out (HTTP 504)`, 'error');
+                        } else {
+                            log(`[ROUTE ERROR] Request from ${clientIp} failed to route! Response: ${data.detail}`, 'error');
+                        }
+                    } catch (err) {
+                        log(`[ROUTE FAILURE] Request from ${clientIp} failed to connect to frontend.`, 'error');
+                    }
+                    // Micro sleep to cascade requests visually
+                    await new Promise(r => setTimeout(r, 400));
+                }
+                
+                trafficBtn.innerText = 'Send Client Requests';
+                trafficBtn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
