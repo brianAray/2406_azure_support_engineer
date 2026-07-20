@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
@@ -7,13 +8,13 @@ from jwt import PyJWKClient
 app = FastAPI(title="RetailBank-Pro Transaction API")
 
 # Configuration
-TENANT_ID = "00000000-0000-0000-0000-000000000000"
-AUDIENCE = "https://api.retailbank.com"
+TENANT_ID = os.getenv("TENANT_ID", "00000000-0000-0000-0000-000000000000")
+AUDIENCE = os.getenv("AUDIENCE", "https://api.retailbank.com")
 # Note: Entra ID v2 tokens usually end with /v2.0, while v1 tokens end with /
-ISSUER_URL = f"https://sts.windows.net/{TENANT_ID}/" 
+ISSUER_URL = os.getenv("ISSUER_URL", f"https://sts.windows.net/{TENANT_ID}/")
 
 # Entra ID OpenID configuration / JWKS endpoint
-JWKS_URL = f"https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys"
+JWKS_URL = os.getenv("JWKS_URL", f"https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys")
 
 # PyJWKClient caches the public keys automatically
 jwk_client = PyJWKClient(JWKS_URL)
@@ -26,18 +27,25 @@ def verify_entra_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     token = credentials.credentials
     
     try:
-        # 1. Fetch the matching public key based on the token's 'kid' header
-        signing_key = jwk_client.get_signing_key_from_jwt(token)
-        
-        # 2. Cryptographically verify signature, exp, aud, and iss
-        payload = jwt.decode(
-            token,
-            key=signing_key.key,
-            algorithms=["RS256"],
-            audience=AUDIENCE,
-            issuer=ISSUER_URL,
-            options={"verify_exp": True} # Default, but explicitly stated
-        )
+        if TENANT_ID == "00000000-0000-0000-0000-000000000000":
+            # Mock / local testing mode: bypass signature verification since there is no real tenant
+            payload = jwt.decode(
+                token,
+                options={"verify_signature": False, "verify_exp": True},
+                audience=AUDIENCE,
+                issuer=ISSUER_URL
+            )
+        else:
+            # Real Entra ID validation: fetch public key from JWKS and verify signature
+            signing_key = jwk_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                key=signing_key.key,
+                algorithms=["RS256"],
+                audience=AUDIENCE,
+                issuer=ISSUER_URL,
+                options={"verify_exp": True}
+            )
     except jwt.PyJWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
