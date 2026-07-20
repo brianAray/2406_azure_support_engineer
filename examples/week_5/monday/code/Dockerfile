@@ -3,7 +3,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn pyjwt
+RUN pip install --no-cache-dir fastapi uvicorn "PyJWT[crypto]" requests
 
 # Copy code
 COPY demo_aad_auth_app.py .
