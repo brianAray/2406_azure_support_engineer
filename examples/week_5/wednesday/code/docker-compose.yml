@@ -1,0 +1,36 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=banking
+      - DB_USER=postgres
+      - DB_PASSWORD=supersecret
+      - AZURE_AD_TENANT_ID=${AZURE_AD_TENANT_ID}
+      - AZURE_AD_CLIENT_ID=${AZURE_AD_CLIENT_ID}
+      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING}
+    depends_on:
+      - db
+    networks:
+      - banking-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=banking
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=supersecret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+
+networks:
+  banking-network:
+
+volumes:
+  postgres_data:
