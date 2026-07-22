@@ -4,15 +4,46 @@ import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from .auth import verify_token
+# ====================================================================================
+# OBSERVABILITY & DISTRIBUTED TRACING (OpenTelemetry Integration)
+# ====================================================================================
+# What is OpenTelemetry (OTel)?
+#   OpenTelemetry is a vendor-neutral CNCF framework that standardizes how telemetry
+#   (Metrics, Logs, and Distributed Traces) is collected and exported from microservices
+#   to observability backends like Azure Application Insights and Log Analytics.
+#
+# Typical Mistake vs. SRE Best Practice:
+#   TYPICAL SETUP: Calling only `configure_azure_monitor(connection_string=...)` and 
+#   assuming Azure Monitor automatically captures all web routes and database calls.
+#
+# WHAT MUST BE DONE DIFFERENTLY & WHY:
+#   1. configure_azure_monitor(): Initializes global OpenTelemetry providers & Azure exporters.
+#   2. FastAPIInstrumentor.instrument_app(app): Explicitly hooks into FastAPI's ASGI 
+#      request engine. WITHOUT THIS, incoming HTTP requests do NOT generate server 
+#      spans, causing the `AppRequests` table in Log Analytics to remain empty.
+#   3. Psycopg2Instrumentor().instrument(): Monkey-patches the `psycopg2` driver to 
+#      intercept SQL queries. WITHOUT THIS, database calls fail to produce dependency 
+#      spans, causing the `AppDependencies` table to return 0 records.
+# ====================================================================================
 from azure.monitor.opentelemetry import configure_azure_monitor
-
-# Configure Azure Monitor if connection string is present
-app_insights_conn_str = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-if app_insights_conn_str:
-    configure_azure_monitor(connection_string=app_insights_conn_str)
-    logging.getLogger(__name__).info("Azure Monitor Configured.")
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
 
 app = FastAPI(title="Banking Microservice API")
+
+# Configure Azure Monitor & explicit OTel instrumentors if connection string is present
+app_insights_conn_str = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+if app_insights_conn_str:
+    # Step 1: Initialize Azure Monitor OpenTelemetry Distro Exporters
+    configure_azure_monitor(connection_string=app_insights_conn_str)
+    
+    # Step 2: Instrument FastAPI HTTP Server Spans -> Populates 'AppRequests'
+    FastAPIInstrumentor.instrument_app(app)
+    
+    # Step 3: Instrument Psycopg2 PostgreSQL Client Spans -> Populates 'AppDependencies'
+    Psycopg2Instrumentor().instrument()
+    
+    logging.getLogger(__name__).info("Azure Monitor, FastAPI & Psycopg2 OpenTelemetry Instrumentations Active.")
 
 app.add_middleware(
     CORSMiddleware,

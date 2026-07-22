@@ -5,4 +5,6 @@ PyJWT==2.8.0
 cryptography==41.0.3
 requests==2.31.0
 azure-monitor-opentelemetry>=1.0.0
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-psycopg2
 python-dotenv==1.0.0
