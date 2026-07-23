@@ -1,0 +1,60 @@
+// ====================================================================
+// KQL Query Suite: Capstone Banking Microservice Observability
+// Based on Monitoring & Observability Week (Log Analytics & Kusto)
+// ====================================================================
+
+// --------------------------------------------------------------------
+// Section 1: KQL Basics & Request Health (Wednesday Topic)
+// Description: Summarize total requests by HTTP result code over time.
+// --------------------------------------------------------------------
+AppRequests
+| where TimeGenerated > ago(1h)
+| summarize RequestCount = count() by ResultCode
+| order by RequestCount desc;
+
+// --------------------------------------------------------------------
+// Section 2: Security Audit & Identity Tracking (Tuesday/Wednesday Topic)
+// Description: Track unauthorized (401) and forbidden (403) access attempts.
+// --------------------------------------------------------------------
+AppRequests
+| where TimeGenerated > ago(1h)
+| where ResultCode in ("401", "403")
+| project TimeGenerated, OperationName, Url, ResultCode, ClientIP, OperationId
+| order by TimeGenerated desc;
+
+// --------------------------------------------------------------------
+// Section 3: Dependency Latency & DB Performance (Wednesday Topic)
+// Description: Calculate P50, P90, and P99 latency for PostgreSQL calls.
+// --------------------------------------------------------------------
+AppDependencies
+| where TimeGenerated > ago(1h)
+| summarize 
+    TotalQueries = count(),
+    AvgDurationMs = avg(DurationMs),
+    P50_Ms = percentiles(DurationMs, 50),
+    P90_Ms = percentiles(DurationMs, 90),
+    P99_Ms = percentiles(DurationMs, 99)
+  by Target;
+
+// --------------------------------------------------------------------
+// Section 4: Incident Investigation & Correlation (Thursday Topic)
+// Description: Correlate failed 5xx requests with stack traces using operation_Id.
+// --------------------------------------------------------------------
+AppRequests
+| where TimeGenerated > ago(1h)
+| where ResultCode startswith "5"
+| join kind=inner (
+    AppExceptions
+    | project TimeGenerated, ExceptionType, OuterMessage, OperationId
+) on $left.OperationId == $right.OperationId
+| project RequestTime = TimeGenerated, Url, ResultCode, ExceptionType, OuterMessage, OperationId;
+
+// --------------------------------------------------------------------
+// Section 5: Log-Based Health Alert Query (Friday Topic)
+// Description: Triggers when HTTP 5xx errors exceed 5 in a 5-minute window.
+// --------------------------------------------------------------------
+AppRequests
+| where TimeGenerated > ago(15m)
+| where ResultCode startswith "5"
+| summarize ErrorCount = count() by bin(TimeGenerated, 5m)
+| where ErrorCount > 5;
